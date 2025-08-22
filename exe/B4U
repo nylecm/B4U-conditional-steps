@@ -1,0 +1,145 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'optparse'
+require 'B4U'
+require 'open3'
+require 'fileutils'
+require 'logger'
+require 'yaml'
+
+def setup_new_project
+  if Dir.exist? '.git'
+    if File.exist?(File.join(Dir.pwd, '.B4U'))
+      puts 'Found existing .B4U directory, exiting...'.red.bold
+      exit 1
+    else
+      FileUtils.mkdir '.B4U'
+      hooks = %w[commit push]
+      hooks.each do |hook_name|
+        set_config(hook_name)
+        set_hooks(hook_name)
+      end
+    end
+  else
+    puts "Couldn't find .git folder in the current directory: #{Dir.pwd}".red.bold
+    exit 1
+  end
+end
+
+def hook_executable(hook_name)
+  <<~BASH
+    #!/bin/sh
+
+    if ! command -v B4U 2>&1 >/dev/null
+    then
+        echo "B4U gem is not installed"
+        echo "You should install it using:"
+        echo "gem install B4U"
+        exit 1
+    fi
+    B4U --#{hook_name}
+  BASH
+end
+
+def config_file(hook_name)
+  <<~YAML
+    linters:
+      - placeholder:
+        name: Add your pre #{hook_name} tasks to .B4U/#{hook_name}.yml
+        command: echo "B4U is working, but you haven't set your pre-#{hook_name} tasks"; exit 1
+        ignore: false
+  YAML
+end
+
+def set_hooks(hook_name)
+  filename = ".B4U/pre-#{hook_name}"
+  File.open(filename, 'w') do |file|
+    file.write(hook_executable(hook_name))
+  end
+  File.chmod(0o755, filename)
+end
+
+def set_config(hook_name)
+  filename = ".B4U/#{hook_name}.yml"
+  File.open(filename, 'w') do |file|
+    file.write(config_file(hook_name))
+  end
+end
+
+def enable_git_hooks
+  system('git config core.hooksPath .B4U')
+end
+
+def parse_arguments
+  options = {}
+  # rubocop:disable Metrics/BlockLength
+  OptionParser.new do |opts|
+    opts.banner = 'Usage: B4U [options]'
+
+    opts.on('-h', '--help', 'Show help message') do
+      puts 'B4U - B4U is a configurable multithreaded task runner that is triggered by git actions'
+      puts 'usage: B4U [options]'
+      puts '   --init                           Create a new config file in the current directory'
+      puts '   --enable                         Add B4U hooks to your local git config in this repo'
+      puts '   --commit                         Runs B4U using the config in .B4U/commit.yml'
+      puts '   --push                           Runs B4U using the config in .B4U/push.yml'
+      puts '   --no-colour                      Disable colour output'
+      puts '   -h, --help                       Show help message'
+      puts '   -v, --version                    Show version'
+      exit
+    end
+    opts.on('-v', '--version', 'Show version') do
+      puts B4U::VERSION
+      exit
+    end
+    opts.on('--no-colour', 'Enable colour output') do
+      options[:no_colour] = true
+    end
+    opts.on('--init', 'init',
+            'Setup B4U in the current directory') do
+      String.enable_colour unless options[:no_colour]
+      setup_new_project
+      puts "Initialized B4U in #{Dir.pwd}".bg_green
+      puts 'you should add the .B4U directory to version control'.cyan.bold
+      enable_git_hooks
+      exit
+    end
+    opts.on('--enable', 'enable', 'Add B4U to your local git config') do
+      enable_git_hooks
+      puts 'Added B4U to the config for this project'.green
+      exit
+    end
+    opts.on('--commit', 'Run pre commit hooks') do
+      options[:config_file] = '.B4U/commit.yml'
+    end
+    opts.on('--push', 'Run pre push hooks') do
+      options[:config_file] = '.B4U/push.yml'
+    end
+  end.parse!
+  # rubocop:enable Metrics/BlockLength
+  options
+end
+
+def run_B4U(options)
+  String.enable_colour unless options[:no_colour]
+  config = if options[:config_file]
+             begin
+               YAML.load_file(options[:config_file])
+             rescue StandardError
+               puts "Couldn't load config file: #{options[:config_file]} in from directory #{Dir.pwd}".red.bold
+               exit 1
+             end
+           else
+             puts "You need to give B4U a command, run 'B4U -h' for help".red.bold
+             exit 1
+           end
+  B4U.lint(config:)
+end
+
+begin
+  options = parse_arguments
+  run_B4U(options)
+rescue OptionParser::InvalidOption, OptionParser::InvalidArgument => e
+  puts e.message
+end

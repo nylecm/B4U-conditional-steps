@@ -1,0 +1,8 @@
+inherit_gem:
+  dvla-lint: ".rubocop.yml"
+
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.1.0
+  Exclude:
+    - 'B4U.gemspec'
