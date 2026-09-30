@@ -44,15 +44,18 @@ end
 
 def config_file(hook_name)
   <<~YAML
+    # Optional: conditions run once before any linter. A linter with `run_if: <id>`
+    # is skipped when that condition exits non-zero.
+    # conditions:
+    #   ruby-staged:
+    #     description: Ruby files staged
+    #     command: "! git diff --staged --quiet -- source-code-dir"
     linters:
       - placeholder:
         name: Add your pre #{hook_name} tasks to .B4U/#{hook_name}.yml
         command: echo "B4U is working, but you haven't set your pre-#{hook_name} tasks"; exit 1
         ignore: false
-        # Optional: only run this step when the condition exits 0, otherwise it is skipped
-        # run_if:
-        #   description: Ruby files staged
-        #   command: "! git diff --staged --quiet -- '*.rb'"
+        # run_if: ruby-staged
   YAML
 end
 

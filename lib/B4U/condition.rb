@@ -1,7 +1,6 @@
 require 'open3'
 
 class Condition
-  KEYS = %w[command description].freeze
   # 126 = found but not executable, 127 = command not found
   BROKEN_EXIT_CODES = [126, 127].freeze
 
@@ -12,25 +11,32 @@ class Condition
     @description = description
   end
 
-  # Builds a Condition from a step's run_if config, or returns nil if the step has none
-  def self.from_config(run_if, step:)
-    return if run_if.nil?
-    raise config_error(step, "run_if must be a mapping with a 'command'") unless run_if.is_a?(Hash)
+  # Builds { id => Condition } from the top-level `conditions:` config
+  def self.from_config(config)
+    return {} if config.nil?
+    raise ConfigError, 'conditions must be a mapping of id to condition' unless config.is_a?(Hash)
 
-    unknown_keys = run_if.keys - KEYS
-    raise config_error(step, "unknown run_if key(s): #{unknown_keys.join(', ')}") unless unknown_keys.empty?
+    config.to_h do |id, condition|
+      raise ConfigError, "Condition '#{id}' needs a 'command'" unless condition.is_a?(Hash) && condition['command'].is_a?(String)
 
-    command, description = run_if.values_at('command', 'description')
-    raise config_error(step, "run_if must be a mapping with a 'command'") unless command.is_a?(String) && !command.strip.empty?
-    raise config_error(step, 'run_if description must be a string') unless description.nil? || description.is_a?(String)
-
-    new(command:, description:)
+      [id, new(command: condition['command'], description: condition['description'])]
+    end
   end
 
-  def self.config_error(step, msg)
-    ConfigError.new("Step '#{step}': #{msg}")
+  # Runs each condition the linters use once, in parallel. Returns { id => true if met }
+  def self.check(conditions, linters)
+    ids = linters.filter_map { |linter| linter['run_if'] }.uniq
+    unknown_ids = ids - conditions.keys
+    raise ConfigError, "Unknown run_if condition(s): #{unknown_ids.join(', ')}" unless unknown_ids.empty?
+
+    threads = ids.to_h { |id| [id, Thread.new { conditions[id].evaluate }] }
+    threads.to_h do |id, thread|
+      result, console_output = thread.value
+      raise ConfigError, "Condition '#{id}' could not run:\n#{console_output}" if result == :broken
+
+      [id, result == :met]
+    end
   end
-  private_class_method :config_error
 
   def label
     description || command

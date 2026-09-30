@@ -1,6 +1,6 @@
 ## [1.1.0]
 
-- Add optional `run_if` to steps: a condition (`command` + optional `description`) that skips the step when it exits non-zero
+- Add a top-level `conditions:` section. Linters reference one with `run_if: <id>` and are skipped 🦘 when it exits non-zero. Each condition runs once, before any linter
 
 ## [1.0.1] - 2025-08-22
 
