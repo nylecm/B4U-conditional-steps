@@ -4,17 +4,18 @@ module B4U
       @linters = linters
     end
 
+    # Returns the number of skipped linters, exits 1 on any blocking failure
     def run_all
-      errors = @linters.map do |linter|
+      results = @linters.map do |linter|
         Thread.new do
           begin
             linter.run
-            nil
           rescue LinterError => e
             e
           end
         end
-      end.map(&:join).filter_map(&:value)
+      end.map(&:value)
+      errors = results.grep(LinterError)
       unless errors.empty?
         puts "\n"
         errors.each do |error|
@@ -23,6 +24,7 @@ module B4U
         end
         exit 1
       end
+      results.count(:skipped)
     end
   end
 end

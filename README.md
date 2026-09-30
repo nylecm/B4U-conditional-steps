@@ -52,6 +52,50 @@ linters:
 
 **Important:** Tasks run in parallel, so only use read-only commands to avoid conflicts.
 
+### Conditional steps (`run_if`)
+
+A step can have one `run_if` condition. The condition runs first and follows the shell exit-code convention:
+
+| Condition exit code | Result |
+|---|---|
+| `0` | Step runs |
+| Any other code | Step is skipped 🦘 (never blocks) |
+| `126` / `127` (not executable / command not found) | Treated as a broken condition: the step fails, even if it has `ignore: true` |
+
+`command` is required; `description` is optional and shown in the skip output (the command is shown if it's missing).
+
+```yaml
+linters:
+  - name: "Rubocop"
+    command: "bundle exec rubocop"
+    run_if:
+      description: "Ruby files staged"
+      command: "! git diff --staged --quiet -- '*.rb'"
+```
+
+Note the `!`: `git diff --quiet` exits `0` when there are *no* changes, so it has to be negated to mean "run if Ruby files are staged".
+
+The condition can also be a script (it must be executable):
+
+```yaml
+    run_if:
+      description: "JS files staged"
+      command: ".B4U/conditions/js_staged.sh"
+```
+
+```sh
+#!/bin/sh
+# exit 0 (run) if any JS files are staged
+if git diff --staged --quiet -- '*.js'; then
+  exit 1
+fi
+exit 0
+```
+
+Conditions run in parallel just like tasks, so keep them read-only too.
+
+For pre-push, B4U doesn't forward the refs git passes to the hook on stdin, so compare against the upstream instead, e.g. `! git diff --quiet @{u}...HEAD -- '*.rb'`.
+
 ## Usage
 
 ### Command Line Options
