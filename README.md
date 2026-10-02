@@ -63,7 +63,7 @@ conditions:
     command: "! git diff --staged --quiet -- '*.rb'"
   folder-staged:
     description: "source-code folder changed"
-    command: "! g! git diff --staged --quiet -- source-code-dir
+    command: "! git diff --staged --quiet -- dir-with-change"
 
 linters:
   - name: "Rubocop"
